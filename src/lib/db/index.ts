@@ -8,11 +8,17 @@ if (!fs.existsSync(dataDirectory)) {
   fs.mkdirSync(dataDirectory, { recursive: true });
 }
 
-const dbPath = path.join(dataDirectory, "work-items.db");
+const isTestEnvironment = process.env.NODE_ENV === "test";
+
+const dbFileName = isTestEnvironment ? "test-work-items.db" : "work-items.db";
+
+const dbPath = path.join(dataDirectory, dbFileName);
 
 const db = new DatabaseSync(dbPath);
 
 db.exec(`
+  PRAGMA journal_mode = WAL;
+
   CREATE TABLE IF NOT EXISTS work_items (
     id TEXT PRIMARY KEY,
     external_id TEXT NOT NULL UNIQUE,
@@ -25,7 +31,7 @@ db.exec(`
     recommended_action TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-  )
+  );
 `);
 
 export default db;

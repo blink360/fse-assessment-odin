@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+
 import db from "../db";
+
 import {
   createWorkItem,
   getWorkItemById,
@@ -8,8 +10,13 @@ import {
   saveAnalysis,
 } from "../services/api/work-item-service";
 
-import { analyseWorkItem } from "../services/api/work-item-analysis-service";
+import {
+  analyseWorkItem,
+  retryAnalyseWorkItem,
+} from "../services/api/work-item-analysis-service";
+
 import { MockAIProvider } from "../ai/mock-ai-provider";
+
 import { canTransition } from "../utils/work-item-state";
 
 describe("Work Item System", () => {
@@ -26,8 +33,7 @@ describe("Work Item System", () => {
       const workItem = createWorkItem({
         externalId: "CRM-12345",
         title: "Missing income document",
-        description:
-          "The applicant has not provided their latest payslip.",
+        description: "The applicant has not provided their latest payslip.",
       });
 
       expect(workItem).toBeDefined();
@@ -109,53 +115,41 @@ describe("Work Item System", () => {
 
   describe("State machine", () => {
     it("should allow RECEIVED → ANALYSING", () => {
-      expect(
-        canTransition("RECEIVED", "ANALYSING"),
-      ).toBe(true);
+      expect(canTransition("RECEIVED", "ANALYSING")).toBe(true);
     });
 
     it("should allow ANALYSING → READY_FOR_REVIEW", () => {
-      expect(
-        canTransition("ANALYSING", "READY_FOR_REVIEW"),
-      ).toBe(true);
+      expect(canTransition("ANALYSING", "READY_FOR_REVIEW")).toBe(true);
     });
 
     it("should allow ANALYSING → FAILED", () => {
-      expect(
-        canTransition("ANALYSING", "FAILED"),
-      ).toBe(true);
+      expect(canTransition("ANALYSING", "FAILED")).toBe(true);
     });
 
     it("should allow READY_FOR_REVIEW → COMPLETED", () => {
-      expect(
-        canTransition("READY_FOR_REVIEW", "COMPLETED"),
-      ).toBe(true);
+      expect(canTransition("READY_FOR_REVIEW", "COMPLETED")).toBe(true);
     });
 
     it("should allow FAILED → ANALYSING", () => {
-      expect(
-        canTransition("FAILED", "ANALYSING"),
-      ).toBe(true);
+      expect(canTransition("FAILED", "ANALYSING")).toBe(true);
     });
 
     it("should reject RECEIVED → COMPLETED", () => {
-      expect(
-        canTransition("RECEIVED", "COMPLETED"),
-      ).toBe(false);
+      expect(canTransition("RECEIVED", "COMPLETED")).toBe(false);
     });
 
     it("should reject COMPLETED → ANALYSING", () => {
-      expect(
-        canTransition("COMPLETED", "ANALYSING"),
-      ).toBe(false);
+      expect(canTransition("COMPLETED", "ANALYSING")).toBe(false);
     });
 
     it("should reject READY_FOR_REVIEW → ANALYSING", () => {
-      expect(
-        canTransition("READY_FOR_REVIEW", "ANALYSING"),
-      ).toBe(false);
+      expect(canTransition("READY_FOR_REVIEW", "ANALYSING")).toBe(false);
     });
   });
+
+  // =====================================================
+  // STATUS TESTS
+  // =====================================================
 
   describe("Status updates", () => {
     it("should allow a valid status transition", () => {
@@ -165,10 +159,7 @@ describe("Work Item System", () => {
         description: "Test description",
       });
 
-      const updated = updateWorkItemStatus(
-        workItem.id,
-        "ANALYSING",
-      );
+      const updated = updateWorkItemStatus(workItem.id, "ANALYSING");
 
       expect(updated.status).toBe("ANALYSING");
     });
@@ -181,13 +172,8 @@ describe("Work Item System", () => {
       });
 
       expect(() => {
-        updateWorkItemStatus(
-          workItem.id,
-          "COMPLETED",
-        );
-      }).toThrow(
-        "Invalid status transition: RECEIVED → COMPLETED",
-      );
+        updateWorkItemStatus(workItem.id, "COMPLETED");
+      }).toThrow("Invalid status transition: RECEIVED → COMPLETED");
 
       const unchanged = getWorkItemById(workItem.id);
 
@@ -204,26 +190,18 @@ describe("Work Item System", () => {
       const workItem = createWorkItem({
         externalId: "CRM-AI-001",
         title: "Missing income document",
-        description:
-          "The applicant has not provided their latest payslip.",
+        description: "The applicant has not provided their latest payslip.",
       });
 
-      const result = await analyseWorkItem(
-        workItem.id,
-        new MockAIProvider(),
-      );
+      const result = await analyseWorkItem(workItem.id, new MockAIProvider());
 
       expect(result.status).toBe("READY_FOR_REVIEW");
 
-      expect(result.category).toBe(
-        "DOCUMENT_REQUEST",
-      );
+      expect(result.category).toBe("DOCUMENT_REQUEST");
 
       expect(result.priority).toBe("HIGH");
 
-      expect(result.summary).toContain(
-        "Missing income document",
-      );
+      expect(result.summary).toContain("Missing income document");
 
       expect(result.recommendedAction).toBe(
         "Request the missing document from the applicant.",
@@ -237,32 +215,23 @@ describe("Work Item System", () => {
         description: "Payslip is missing.",
       });
 
-      await analyseWorkItem(
-        workItem.id,
-        new MockAIProvider(),
-      );
+      await analyseWorkItem(workItem.id, new MockAIProvider());
 
       const saved = getWorkItemById(workItem.id);
 
       expect(saved).not.toBeNull();
 
-      expect(saved?.category).toBe(
-        "DOCUMENT_REQUEST",
-      );
+      expect(saved?.category).toBe("DOCUMENT_REQUEST");
 
       expect(saved?.priority).toBe("HIGH");
 
-      expect(saved?.summary).toContain(
-        "Missing payslip",
-      );
+      expect(saved?.summary).toContain("Missing payslip");
 
       expect(saved?.recommendedAction).toBe(
         "Request the missing document from the applicant.",
       );
 
-      expect(saved?.status).toBe(
-        "READY_FOR_REVIEW",
-      );
+      expect(saved?.status).toBe("READY_FOR_REVIEW");
     });
 
     it("should not allow analysis of an already analysed work item", async () => {
@@ -272,16 +241,10 @@ describe("Work Item System", () => {
         description: "Test description.",
       });
 
-      await analyseWorkItem(
-        workItem.id,
-        new MockAIProvider(),
-      );
+      await analyseWorkItem(workItem.id, new MockAIProvider());
 
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          new MockAIProvider(),
-        ),
+        analyseWorkItem(workItem.id, new MockAIProvider()),
       ).rejects.toThrow(
         "Work item cannot be analysed from status: READY_FOR_REVIEW",
       );
@@ -301,10 +264,7 @@ describe("Work Item System", () => {
       };
 
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          failingProvider,
-        ),
+        analyseWorkItem(workItem.id, failingProvider),
       ).rejects.toThrow("AI provider timeout");
 
       const failed = getWorkItemById(workItem.id);
@@ -336,10 +296,7 @@ describe("Work Item System", () => {
       };
 
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          invalidProvider as any,
-        ),
+        analyseWorkItem(workItem.id, invalidProvider as any),
       ).rejects.toThrow("Invalid AI response");
 
       const failed = getWorkItemById(workItem.id);
@@ -359,7 +316,7 @@ describe("Work Item System", () => {
   // =====================================================
 
   describe("AI Retry", () => {
-    it("should allow a FAILED work item to transition back to ANALYSING", async () => {
+    it("should allow a FAILED work item to be retried", async () => {
       const workItem = createWorkItem({
         externalId: "CRM-RETRY-001",
         title: "Retry test",
@@ -372,97 +329,69 @@ describe("Work Item System", () => {
         },
       };
 
+      // First analysis fails.
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          failingProvider,
-        ),
+        analyseWorkItem(workItem.id, failingProvider),
       ).rejects.toThrow("AI timeout");
 
-      const failed = getWorkItemById(workItem.id);
+      expect(getWorkItemById(workItem.id)?.status).toBe("FAILED");
 
-      expect(failed?.status).toBe("FAILED");
-
-      const retrying = updateWorkItemStatus(
+      // Retry with a successful provider.
+      const retryResult = await retryAnalyseWorkItem(
         workItem.id,
-        "ANALYSING",
+        new MockAIProvider(),
       );
 
-      expect(retrying.status).toBe("ANALYSING");
+      expect(retryResult.status).toBe("READY_FOR_REVIEW");
+
+      expect(retryResult.category).toBe("DOCUMENT_REQUEST");
+
+      expect(retryResult.priority).toBe("HIGH");
     });
 
-    it("should successfully complete analysis after retry", async () => {
+    it("should reject retry when the work item is not FAILED", async () => {
       const workItem = createWorkItem({
         externalId: "CRM-RETRY-002",
-        title: "Missing income document",
-        description:
-          "Applicant is missing a payslip.",
+        title: "Not failed",
+        description: "This item has not failed.",
       });
 
-      // First attempt fails.
+      await expect(
+        retryAnalyseWorkItem(workItem.id, new MockAIProvider()),
+      ).rejects.toThrow("Work item cannot be retried from status: RECEIVED");
+    });
+
+    it("should mark the work item as FAILED if the retry AI call fails", async () => {
+      const workItem = createWorkItem({
+        externalId: "CRM-RETRY-003",
+        title: "Retry failure",
+        description: "Retry should fail.",
+      });
+
       const failingProvider = {
         analyse: async () => {
-          throw new Error("Temporary AI failure");
+          throw new Error("Retry AI failure");
         },
       };
 
+      // First attempt fails.
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          failingProvider,
-        ),
-      ).rejects.toThrow("Temporary AI failure");
+        analyseWorkItem(workItem.id, failingProvider),
+      ).rejects.toThrow("Retry AI failure");
 
-      expect(
-        getWorkItemById(workItem.id)?.status,
-      ).toBe("FAILED");
+      expect(getWorkItemById(workItem.id)?.status).toBe("FAILED");
 
-      // FAILED → ANALYSING
-      updateWorkItemStatus(
-        workItem.id,
-        "ANALYSING",
-      );
+      // Retry also fails.
+      await expect(
+        retryAnalyseWorkItem(workItem.id, failingProvider),
+      ).rejects.toThrow("Retry AI failure");
 
-      // Simulate successful retry.
-      const aiResponse =
-        await new MockAIProvider().analyse({
-          title: workItem.title,
-          description: workItem.description,
-        });
-
-      expect(aiResponse.category).toBe(
-        "DOCUMENT_REQUEST",
-      );
-
-      expect(aiResponse.priority).toBe("HIGH");
-
-      saveAnalysis(
-        workItem.id,
-        aiResponse,
-      );
-
-      const completedAnalysis =
-        updateWorkItemStatus(
-          workItem.id,
-          "READY_FOR_REVIEW",
-        );
-
-      expect(completedAnalysis.status).toBe(
-        "READY_FOR_REVIEW",
-      );
-
-      expect(completedAnalysis.category).toBe(
-        "DOCUMENT_REQUEST",
-      );
-
-      expect(completedAnalysis.priority).toBe(
-        "HIGH",
-      );
+      expect(getWorkItemById(workItem.id)?.status).toBe("FAILED");
     });
   });
 
   // =====================================================
-  // COMPLETION TEST
+  // COMPLETION TESTS
   // =====================================================
 
   describe("Completion", () => {
@@ -473,19 +402,11 @@ describe("Work Item System", () => {
         description: "Missing payslip.",
       });
 
-      await analyseWorkItem(
-        workItem.id,
-        new MockAIProvider(),
-      );
+      await analyseWorkItem(workItem.id, new MockAIProvider());
 
-      const completed = updateWorkItemStatus(
-        workItem.id,
-        "COMPLETED",
-      );
+      const completed = updateWorkItemStatus(workItem.id, "COMPLETED");
 
-      expect(completed.status).toBe(
-        "COMPLETED",
-      );
+      expect(completed.status).toBe("COMPLETED");
     });
 
     it("should not allow RECEIVED → COMPLETED", () => {
@@ -496,13 +417,8 @@ describe("Work Item System", () => {
       });
 
       expect(() => {
-        updateWorkItemStatus(
-          workItem.id,
-          "COMPLETED",
-        );
-      }).toThrow(
-        "Invalid status transition: RECEIVED → COMPLETED",
-      );
+        updateWorkItemStatus(workItem.id, "COMPLETED");
+      }).toThrow("Invalid status transition: RECEIVED → COMPLETED");
     });
 
     it("should not allow FAILED → COMPLETED", async () => {
@@ -519,25 +435,14 @@ describe("Work Item System", () => {
       };
 
       await expect(
-        analyseWorkItem(
-          workItem.id,
-          failingProvider,
-        ),
+        analyseWorkItem(workItem.id, failingProvider),
       ).rejects.toThrow("AI failure");
 
-      expect(
-        getWorkItemById(workItem.id)?.status,
-      ).toBe("FAILED");
+      expect(getWorkItemById(workItem.id)?.status).toBe("FAILED");
 
       expect(() => {
-        updateWorkItemStatus(
-          workItem.id,
-          "COMPLETED",
-        );
-      }).toThrow(
-        "Invalid status transition: FAILED → COMPLETED",
-      );
+        updateWorkItemStatus(workItem.id, "COMPLETED");
+      }).toThrow("Invalid status transition: FAILED → COMPLETED");
     });
   });
 });
-
