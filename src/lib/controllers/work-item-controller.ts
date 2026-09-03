@@ -10,10 +10,13 @@ import {
   getWorkItems,
   getWorkItemById,
   updateWorkItemStatus,
-} from "..//services/api/work-item-service";
+} from "../services/api/work-item-service";
 
 import { MockAIProvider } from "../ai/mock-ai-provider";
-import { analyseWorkItem } from "../services/api/work-item-analysis-service";
+import {
+  analyseWorkItem,
+  retryAnalyseWorkItem,
+} from "../services/api/work-item-analysis-service";
 
 export class WorkItemController {
   static async create(request: NextRequest) {
@@ -84,10 +87,7 @@ export class WorkItemController {
     }
   }
 
-  static async updateStatus(
-    request: NextRequest,
-    id: string,
-  ) {
+  static async updateStatus(request: NextRequest, id: string) {
     try {
       const body = await request.json();
 
@@ -103,35 +103,21 @@ export class WorkItemController {
         );
       }
 
-      const workItem = updateWorkItemStatus(
-        id,
-        result.data.status,
-      );
+      const workItem = updateWorkItemStatus(id, result.data.status);
 
       return NextResponse.json(workItem);
     } catch (error) {
       console.error(error);
 
-      if (
-        error instanceof Error &&
-        error.message === "Work item not found"
-      ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 404 },
-        );
+      if (error instanceof Error && error.message === "Work item not found") {
+        return NextResponse.json({ error: error.message }, { status: 404 });
       }
 
       if (
         error instanceof Error &&
-        error.message.startsWith(
-          "Invalid status transition",
-        )
+        error.message.startsWith("Invalid status transition")
       ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
 
       return NextResponse.json(
@@ -143,45 +129,25 @@ export class WorkItemController {
 
   static async analyse(id: string) {
     try {
-      const workItem = await analyseWorkItem(
-        id,
-        new MockAIProvider(),
-      );
+      const workItem = await analyseWorkItem(id, new MockAIProvider());
 
       return NextResponse.json(workItem);
     } catch (error) {
       console.error(error);
 
-      if (
-        error instanceof Error &&
-        error.message === "Work item not found"
-      ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 404 },
-        );
+      if (error instanceof Error && error.message === "Work item not found") {
+        return NextResponse.json({ error: error.message }, { status: 404 });
       }
 
       if (
         error instanceof Error &&
-        error.message.startsWith(
-          "Work item cannot be analysed",
-        )
+        error.message.startsWith("Work item cannot be analysed")
       ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
 
-      if (
-        error instanceof Error &&
-        error.message === "Invalid AI response"
-      ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 502 },
-        );
+      if (error instanceof Error && error.message === "Invalid AI response") {
+        return NextResponse.json({ error: error.message }, { status: 502 });
       }
 
       return NextResponse.json(
@@ -193,63 +159,25 @@ export class WorkItemController {
 
   static async retry(id: string) {
     try {
-      const workItem = getWorkItemById(id);
+      const workItem = await retryAnalyseWorkItem(id, new MockAIProvider());
 
-      if (!workItem) {
-        return NextResponse.json(
-          { error: "Work item not found" },
-          { status: 404 },
-        );
-      }
-
-      if (workItem.status !== "FAILED") {
-        return NextResponse.json(
-          {
-            error: `Work item cannot be retried from status: ${workItem.status}`,
-          },
-          { status: 409 },
-        );
-      }
-
-      const retriedWorkItem = await analyseWorkItem(
-        id,
-        new MockAIProvider(),
-      );
-
-      return NextResponse.json(retriedWorkItem);
+      return NextResponse.json(workItem);
     } catch (error) {
       console.error(error);
 
-      if (
-        error instanceof Error &&
-        error.message === "Work item not found"
-      ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 404 },
-        );
+      if (error instanceof Error && error.message === "Work item not found") {
+        return NextResponse.json({ error: error.message }, { status: 404 });
       }
 
       if (
         error instanceof Error &&
-        error.message.startsWith(
-          "Work item cannot be analysed",
-        )
+        error.message.startsWith("Work item cannot be retried")
       ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
 
-      if (
-        error instanceof Error &&
-        error.message === "Invalid AI response"
-      ) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 502 },
-        );
+      if (error instanceof Error && error.message === "Invalid AI response") {
+        return NextResponse.json({ error: error.message }, { status: 502 });
       }
 
       return NextResponse.json(
